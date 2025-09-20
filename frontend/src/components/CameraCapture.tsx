@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect } from "react";
 import { loadModels, detectFace } from "@/lib/faceApi";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function CameraCapture() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -55,6 +56,31 @@ export default function CameraCapture() {
 
     const dataUrl = canvasRef.current.toDataURL("image/png");
     setImageData(dataUrl);
+
+    // Convert base64 → Blob
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+
+    // Upload to Supabase
+    const fileName = `capture-${Date.now()}.png`;
+    const { data, error } = await supabase.storage
+      .from("faces")
+      .upload(fileName, blob, {
+        contentType: "image/png",
+      });
+
+    if (error) {
+      console.error("Upload error:", error);
+      if (error.message.includes("row-level security")) {
+        setFaceStatus("❌ Permission denied. Check Supabase RLS policies.");
+      } else {
+        setFaceStatus("❌ Upload failed: " + error.message);
+      }
+      return;
+    }
+
+    console.log("Uploaded:", data);
+    setFaceStatus("✅ Face detected & uploaded!");
   };
 
   return (
@@ -82,7 +108,7 @@ export default function CameraCapture() {
           onClick={capturePhoto}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
         >
-          Capture
+          Capture & Upload
         </button>
       </div>
     </div>
