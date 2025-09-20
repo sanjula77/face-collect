@@ -3,12 +3,14 @@
 import { useRef, useState, useEffect } from "react";
 import { loadModels, detectFace } from "@/lib/faceApi";
 import { supabase } from "@/lib/supabaseClient";
+import CaptureForm from "./CaptureForm";
 
 export default function CameraCapture() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imageData, setImageData] = useState<string | null>(null);
   const [faceStatus, setFaceStatus] = useState<string>("");
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
 
   useEffect(() => {
     loadModels();
@@ -79,7 +81,11 @@ export default function CameraCapture() {
       return;
     }
 
-    console.log("Uploaded:", data);
+    // Get public URL after upload
+    const { data: publicUrl } = supabase.storage
+      .from("faces")
+      .getPublicUrl(fileName);
+    setFileUrl(publicUrl.publicUrl);
     setFaceStatus("✅ Face detected & uploaded!");
   };
 
@@ -111,6 +117,7 @@ export default function CameraCapture() {
           Capture & Upload
         </button>
       </div>
+      <CaptureForm fileUrl={fileUrl} />
     </div>
   );
 }
