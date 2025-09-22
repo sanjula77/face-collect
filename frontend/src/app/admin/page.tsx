@@ -1,446 +1,663 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { getUsers, getCaptureSessions, getDatabaseStats, deleteUser, getCaptureSessionWithImages } from "@/lib/database";
+import type { UserRecord, CaptureSessionRecord } from "@/lib/database";
+import AdminLogin from "@/components/AdminLogin";
 
-interface FaceEntry {
-  id: string;
-  name: string;
-  age: number | null;
-  gender: string | null;
-  consent: boolean;
-  file_url: string;
-  created_at: string;
+/**
+ * Admin Panel: Professional admin interface for managing face collection data
+ * 
+ * Features:
+ * - User management
+ * - Capture session monitoring
+ * - Database statistics
+ * - Data export capabilities
+ * - Professional UI design
+ */
+
+// ============================================================================
+// TYPES
+// ============================================================================
+
+interface AdminStats {
+  totalUsers: number;
+  totalSessions: number;
+  totalImages: number;
+  completedSessions: number;
+  failedSessions: number;
 }
 
+// ============================================================================
+// MAIN COMPONENT
+// ============================================================================
+
 export default function AdminPage() {
+
+  // Authentication state
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [loginError, setLoginError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [entries, setEntries] = useState<FaceEntry[]>([]);
+
+  // State
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'sessions' | 'images'>('overview');
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [users, setUsers] = useState<UserRecord[]>([]);
+  const [sessions, setSessions] = useState<(CaptureSessionRecord & { user: UserRecord })[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
-  const [fetchError, setFetchError] = useState("");
+  const [selectedSessionImages, setSelectedSessionImages] = useState<any[]>([]);
+  const [selectedSession, setSelectedSession] = useState<any>(null);
 
-  // TODO: Implement proper authentication logic
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setLoginError("");
+  // ============================================================================
+  // DATA FETCHING
+  // ============================================================================
 
+  const loadStats = async () => {
     try {
-      // TODO: Replace with actual authentication API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      if (password === "admin123") {
-        setIsAuthenticated(true);
-        setPassword("");
-      } else {
-        setLoginError("Invalid password. Please try again.");
-      }
-    } catch {
-      setLoginError("Login failed. Please try again.");
-    } finally {
-      setIsLoading(false);
+      const statsData = await getDatabaseStats();
+      setStats(statsData);
+    } catch (error) {
+      console.error("Error loading stats:", error);
+      setError("Failed to load statistics");
     }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setPassword("");
-    setLoginError("");
-    setEntries([]);
+  const loadUsers = async (page: number = 1) => {
+    try {
+      const { users: usersData } = await getUsers(page, itemsPerPage);
+      setUsers(usersData);
+    } catch (error) {
+      console.error("Error loading users:", error);
+      setError("Failed to load users");
+    }
   };
 
-  const handleDownload = (fileUrl: string, name: string) => {
-    // TODO: Implement actual file download logic
-    console.log(`Downloading file for ${name}: ${fileUrl}`);
-    // For now, just open in new tab
-    window.open(fileUrl, '_blank');
+  const loadSessions = async (page: number = 1) => {
+    try {
+      const { sessions: sessionsData } = await getCaptureSessions(page, itemsPerPage);
+      setSessions(sessionsData);
+    } catch (error) {
+      console.error("Error loading sessions:", error);
+      setError("Failed to load capture sessions");
+    }
   };
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      await Promise.all([
+        loadStats(),
+        loadUsers(currentPage),
+        loadSessions(currentPage)
+      ]);
+    } catch (error) {
+      console.error("Error loading data:", error);
+      setError("Failed to load admin data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ============================================================================
+  // AUTHENTICATION HANDLERS
+  // ============================================================================
+
+  const handleLogin = (authenticated: boolean) => {
+    setIsAuthenticated(authenticated);
+    if (authenticated) {
+      setLoading(true);
+      loadData();
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadData();
+    }
+  }, [currentPage, isAuthenticated]);
+
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`Are you sure you want to delete user "${userName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await deleteUser(userId);
+      await loadData(); // Reload data
+      alert("User deleted successfully");
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      alert("Failed to delete user");
+    }
+  };
+
+  const handleTabChange = (tab: 'overview' | 'users' | 'sessions' | 'images') => {
+    setActiveTab(tab);
+    setCurrentPage(1);
+  };
+
+  const loadSessionImages = async (sessionId: string) => {
+    try {
+      const sessionData = await getCaptureSessionWithImages(sessionId);
+      if (sessionData) {
+        setSelectedSession(sessionData.session);
+        setSelectedSessionImages(sessionData.images);
+        setActiveTab('images');
+      }
+    } catch (error) {
+      console.error('Error loading session images:', error);
+      setError('Failed to load session images');
+    }
+  };
+
+  // ============================================================================
+  // RENDER HELPERS
+  // ============================================================================
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return new Date(dateString).toLocaleString();
   };
 
-  // Fetch data when authenticated
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    const fetchData = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("face_metadata")
-          .select("*")
-          .order("created_at", { ascending: false });
-        
-        if (error) {
-          console.error("Fetch error:", error);
-          setFetchError("Failed to load data. Please try again.");
-        } else {
-          setEntries(data as FaceEntry[]);
-          setFetchError("");
-        }
-      } catch (err) {
-        console.error("Fetch error:", err);
-        setFetchError("Failed to load data. Please try again.");
-      }
+  const getStatusBadge = (status: string) => {
+    const statusColors = {
+      'active': 'bg-green-100 text-green-800',
+      'completed': 'bg-green-100 text-green-800',
+      'in_progress': 'bg-yellow-100 text-yellow-800',
+      'failed': 'bg-red-100 text-red-800',
+      'cancelled': 'bg-gray-100 text-gray-800',
+      'archived': 'bg-gray-100 text-gray-800',
+      'deleted': 'bg-red-100 text-red-800'
     };
-    
-    fetchData();
-  }, [isAuthenticated]);
 
-  // Pagination logic
-  const totalPages = Math.ceil(entries.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentData = entries.slice(startIndex, endIndex);
-
-  // Login Page
-  if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-md w-full space-y-8">
-          <div className="text-center">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-2xl hover:shadow-3xl transition-all duration-500 hover:scale-105 animate-pulse">
-              <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
-            </div>
-            <h2 className="text-3xl font-bold text-gray-800 mb-3">Admin Login</h2>
-            <p className="text-gray-600">Enter your password to access the admin dashboard</p>
+      <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[status as keyof typeof statusColors] || 'bg-gray-100 text-gray-800'}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const getGenderIcon = (gender: string) => {
+    switch (gender) {
+      case 'male': return '👨';
+      case 'female': return '👩';
+      case 'other': return '🧑';
+      default: return '👤';
+    }
+  };
+
+  const getStepIcon = (step: string) => {
+    switch (step) {
+      case 'Center': return '👁️';
+      case 'Left': return '👈';
+      case 'Right': return '👉';
+      case 'Up': return '👆';
+      case 'Down': return '👇';
+      default: return '👤';
+    }
+  };
+
+  // ============================================================================
+  // RENDER
+  // ============================================================================
+
+  // Show login form if not authenticated
+  if (!isAuthenticated) {
+    return <AdminLogin onLogin={handleLogin} />;
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-100 rounded-full mb-4">
+            <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
           </div>
-
-          <form onSubmit={handleLogin} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-8 space-y-6 hover:shadow-2xl transition-all duration-300">
-            <div>
-              <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative group">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl bg-white text-gray-900 placeholder-gray-500 focus:ring-4 focus:ring-blue-500/50 focus:border-blue-500 transition-all duration-300 shadow-sm hover:shadow-md group-hover:shadow-lg"
-                  placeholder="Enter admin password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center group-hover:scale-110 transition-transform duration-300"
-                >
-                  {showPassword ? (
-                    <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-gray-400 hover:text-gray-600 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {loginError && (
-              <div className="bg-red-50 text-red-800 border border-red-200 rounded-xl p-4 animate-shake">
-                <div className="flex items-start space-x-3">
-                  <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-sm font-medium">{loginError}</p>
-                </div>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group w-full bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-4 px-6 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-800 focus:ring-4 focus:ring-blue-500/50 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            >
-              {isLoading ? (
-                <span className="flex items-center justify-center">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Signing In...
-                </span>
-              ) : (
-                <span className="flex items-center justify-center">
-                  <svg className="w-5 h-5 mr-2 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                  </svg>
-                  Sign In
-                </span>
-              )}
-            </button>
-          </form>
-
-          <div className="text-center">
-            <p className="text-sm text-gray-500">
-              Demo password: <code className="bg-gray-100 px-2 py-1 rounded-lg text-xs font-mono">admin123</code>
-            </p>
-          </div>
+          <h2 className="text-xl font-semibold text-gray-800">Loading Admin Panel...</h2>
         </div>
       </div>
     );
   }
 
-  // Dashboard Page
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Top Navbar */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-gray-200/50 sticky top-0 z-50 shadow-sm">
+    <div className="min-h-screen bg-gray-100">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300">
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center space-x-4">
+              <a href="/" className="flex items-center space-x-2 text-gray-600 hover:text-gray-800">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                 </svg>
-              </div>
-              <h1 className="text-xl font-bold text-gray-800">Face Collect Admin</h1>
+                <span>Back to Home</span>
+              </a>
+              <div className="h-6 w-px bg-gray-300"></div>
+              <h1 className="text-2xl font-bold text-gray-800">Admin Panel</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 bg-green-50 px-3 py-1 rounded-full">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-sm text-green-700 font-medium">
-                  {entries.length} total records
-                </span>
-              </div>
+              <span className="text-sm text-gray-500">Face Collection System</span>
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
               <button
-                onClick={handleLogout}
-                className="group bg-gray-100 text-gray-700 px-4 py-2 rounded-xl font-medium hover:bg-gray-200 focus:ring-4 focus:ring-gray-500/50 transition-all duration-300 transform hover:scale-105 shadow-sm hover:shadow-md"
+                onClick={() => setIsAuthenticated(false)}
+                className="px-3 py-1 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
               >
-                <span className="flex items-center">
-                  <svg className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Logout
-                </span>
+                Logout
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="py-8 lg:py-12">
+      {/* Navigation Tabs */}
+      <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold text-gray-800 mb-2">Data Collection Records</h2>
-            <p className="text-gray-600">Manage and view all collected face data submissions</p>
-          </div>
-
-          {/* Error Message */}
-          {fetchError && (
-            <div className="bg-red-50 text-red-800 border border-red-200 rounded-xl p-4 mb-6 animate-shake">
-              <div className="flex items-start space-x-3">
-                <svg className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p className="text-sm font-semibold text-red-800">Error Loading Data</p>
-                  <p className="text-sm text-red-700 mt-1">{fetchError}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* No Data Message */}
-          {entries.length === 0 && !fetchError && (
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-12 text-center hover:shadow-xl transition-all duration-300">
-              <div className="w-20 h-20 bg-gray-100 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-                <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-2">No Data Yet</h3>
-              <p className="text-gray-600">No face data has been collected yet. Check back later.</p>
-            </div>
-          )}
-
-          {/* Desktop Table View */}
-          {entries.length > 0 && (
-            <div className="hidden lg:block">
-              <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 overflow-hidden hover:shadow-xl transition-all duration-300">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gradient-to-r from-gray-50 to-blue-50 sticky top-0">
-                      <tr>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                          Name
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                          Age
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                          Gender
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                          Consent
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                          File
-                        </th>
-                        <th className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                          Created At
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {currentData.map((record, index) => (
-                        <tr 
-                          key={record.id} 
-                          className={`hover:bg-blue-50/50 transition-all duration-300 group ${
-                            index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
-                          }`}
-                        >
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm font-semibold text-gray-800 group-hover:text-blue-800 transition-colors duration-300">
-                              {record.name}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-700">{record.age || 'N/A'}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-700 capitalize">{record.gender || 'N/A'}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                              record.consent 
-                                ? 'bg-green-100 text-green-800 border border-green-200' 
-                                : 'bg-red-100 text-red-800 border border-red-200'
-                            }`}>
-                              {record.consent ? '✅ Yes' : '❌ No'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <button
-                              onClick={() => handleDownload(record.file_url, record.name)}
-                              className="group bg-gradient-to-r from-blue-600 to-indigo-700 text-white px-4 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-indigo-800 focus:ring-4 focus:ring-blue-500/50 transition-all duration-300 transform hover:scale-105 shadow-sm hover:shadow-md"
-                            >
-                              <span className="flex items-center">
-                                <svg className="w-4 h-4 mr-1 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                Download
-                              </span>
-                            </button>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {formatDate(record.created_at)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Mobile Card View */}
-          {entries.length > 0 && (
-            <div className="lg:hidden space-y-4">
-              {currentData.map((record) => (
-                <div key={record.id} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6 hover:shadow-xl transition-all duration-300 group">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-800 group-hover:text-blue-800 transition-colors duration-300">
-                        {record.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">ID: {record.id}</p>
-                    </div>
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                      record.consent 
-                        ? 'bg-green-100 text-green-800 border border-green-200' 
-                        : 'bg-red-100 text-red-800 border border-red-200'
-                    }`}>
-                      {record.consent ? '✅ Yes' : '❌ No'}
-                    </span>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Age</p>
-                      <p className="text-sm text-gray-800 font-medium">{record.age || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Gender</p>
-                      <p className="text-sm text-gray-800 font-medium capitalize">{record.gender || 'N/A'}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="mb-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Created At</p>
-                    <p className="text-sm text-gray-800 font-medium">{formatDate(record.created_at)}</p>
-                  </div>
-                  
-                  <button
-                    onClick={() => handleDownload(record.file_url, record.name)}
-                    className="group w-full bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-3 px-4 rounded-xl font-semibold hover:from-blue-700 hover:to-indigo-800 focus:ring-4 focus:ring-blue-500/50 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-                  >
-                    <span className="flex items-center justify-center">
-                      <svg className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Download File
-                    </span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-8 flex items-center justify-between bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200/50 p-6">
-              <div className="text-sm text-gray-700 font-medium">
-                Showing {startIndex + 1} to {Math.min(endIndex, entries.length)} of {entries.length} results
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                  className="group bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 focus:ring-4 focus:ring-gray-500/50 transition-all duration-300 transform hover:scale-105 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                >
-                  <span className="flex items-center">
-                    <svg className="w-4 h-4 mr-1 group-hover:-translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                    Previous
-                  </span>
-                </button>
-                <span className="text-sm text-gray-700 font-medium px-3 py-2 bg-blue-50 rounded-lg">
-                  Page {currentPage} of {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                  className="group bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 focus:ring-4 focus:ring-gray-500/50 transition-all duration-300 transform hover:scale-105 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                >
-                  <span className="flex items-center">
-                    Next
-                    <svg className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
+          <nav className="flex space-x-8">
+            {[
+              { id: 'overview', label: 'Overview', icon: '📊' },
+              { id: 'users', label: 'Users', icon: '👥' },
+              { id: 'sessions', label: 'Sessions', icon: '📸' },
+              { id: 'images', label: 'Images', icon: '🖼️' }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id as any)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+              >
+                <span className="mr-2">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </nav>
         </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex">
+              <svg className="h-5 w-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-800">Error</h3>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Overview Tab */}
+        {activeTab === 'overview' && stats && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-800">System Overview</h2>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Users</p>
+                    <p className="text-2xl font-semibold text-gray-900">{stats.totalUsers}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Completed Sessions</p>
+                    <p className="text-2xl font-semibold text-gray-900">{stats.completedSessions}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-yellow-100 rounded-lg">
+                    <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Sessions</p>
+                    <p className="text-2xl font-semibold text-gray-900">{stats.totalSessions}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Total Images</p>
+                    <p className="text-2xl font-semibold text-gray-900">{stats.totalImages}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-lg shadow p-6">
+                <div className="flex items-center">
+                  <div className="p-2 bg-red-100 rounded-lg">
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-600">Failed Sessions</p>
+                    <p className="text-2xl font-semibold text-gray-900">{stats.failedSessions}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Quick Actions</h3>
+              <div className="flex flex-wrap gap-4">
+                <a
+                  href="/"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Start New Capture
+                </a>
+                <a
+                  href="/admin/ml-export"
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Export for ML Training
+                </a>
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  View All Users
+                </button>
+                <button
+                  onClick={() => setActiveTab('sessions')}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  View All Sessions
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Users Tab */}
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-800">Users</h2>
+              <span className="text-sm text-gray-500">{users.length} users</span>
+            </div>
+
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="text-2xl mr-3">{getGenderIcon(user.gender)}</div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                              <div className="text-sm text-gray-500">Age: {user.age}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">{user.name}</div>
+                          <div className="text-sm text-gray-500">Age: {user.age} • {user.gender}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(user.created_at)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(user.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => handleDeleteUser(user.id, user.name)}
+                            className="text-red-600 hover:text-red-900"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Sessions Tab */}
+        {activeTab === 'sessions' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-800">Capture Sessions</h2>
+              <span className="text-sm text-gray-500">{sessions.length} sessions</span>
+            </div>
+
+            <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Images</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Started</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {sessions.map((session) => (
+                      <tr key={session.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex items-center">
+                            <div className="text-2xl mr-3">{getGenderIcon(session.user.gender)}</div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{session.user.name}</div>
+                              <div className="text-sm text-gray-500">ID: {session.id.slice(0, 8)}...</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(session.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-900">
+                            {session.successful_images}/{session.total_images}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {session.failed_images > 0 && `${session.failed_images} failed`}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(session.started_at)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {session.completed_at ? formatDate(session.completed_at) : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => setActiveTab('images')}
+                            className="text-blue-600 hover:text-blue-900"
+                          >
+                            View Images
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Images Tab */}
+        {activeTab === 'images' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-800">
+                {selectedSession ? `Images for ${selectedSession.user?.name}` : 'Captured Images'}
+              </h2>
+              <button
+                onClick={() => {
+                  setActiveTab('sessions');
+                  setSelectedSession(null);
+                  setSelectedSessionImages([]);
+                }}
+                className="text-blue-600 hover:text-blue-800 font-medium"
+              >
+                ← Back to Sessions
+              </button>
+            </div>
+
+            {selectedSession ? (
+              // Show specific session images
+              <div className="space-y-6">
+                {/* Session Info */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="flex items-center mb-4">
+                    <div className="text-2xl mr-3">{getGenderIcon(selectedSession.user?.gender)}</div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800">{selectedSession.user?.name}</h3>
+                      <p className="text-sm text-gray-500">Age: {selectedSession.user?.age} • {selectedSession.user?.gender}</p>
+                      <p className="text-xs text-gray-400">{formatDate(selectedSession.started_at)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Status:</span>
+                      {getStatusBadge(selectedSession.status)}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Images:</span>
+                      <span className="text-sm text-gray-600">
+                        {selectedSession.successful_images}/{selectedSession.total_images}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Images Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {selectedSessionImages.map((image, index) => (
+                    <div key={image.id} className="bg-white rounded-lg shadow overflow-hidden">
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                        <img
+                          src={image.image_data}
+                          alt={`${image.step} pose`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="p-4">
+                        <h4 className="font-semibold text-gray-800 mb-2">
+                          {getStepIcon(image.step)} {image.step} Pose
+                        </h4>
+                        <div className="text-sm text-gray-600 space-y-1">
+                          <p>Size: {image.width} × {image.height}</p>
+                          <p>File: {(image.file_size / 1024).toFixed(1)} KB</p>
+                          <p>Captured: {formatDate(image.created_at)}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedSessionImages.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">📷</div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">No Images Found</h3>
+                    <p className="text-gray-600">This session doesn't have any captured images yet.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Show all sessions
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sessions.map((session) => (
+                  <div key={session.id} className="bg-white rounded-lg shadow p-6">
+                    <div className="flex items-center mb-4">
+                      <div className="text-2xl mr-3">{getGenderIcon(session.user.gender)}</div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">{session.user.name}</h3>
+                        <p className="text-sm text-gray-500">Age: {session.user.age} • {session.user.gender}</p>
+                        <p className="text-xs text-gray-400">{formatDate(session.started_at)}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">Status:</span>
+                        {getStatusBadge(session.status)}
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-700">Images:</span>
+                        <span className="text-sm text-gray-600">
+                          {session.successful_images}/{session.total_images}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <button
+                        onClick={() => loadSessionImages(session.id)}
+                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      >
+                        View All Images
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

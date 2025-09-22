@@ -11,17 +11,19 @@
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-size-adjust: 100%;
   }
   
   body {
-    @apply bg-gray-50 text-gray-900 font-sans;
+    @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-gray-900 font-sans;
     font-feature-settings: "rlig" 1, "calt" 1;
     line-height: 1.6;
+    min-height: 100vh;
   }
   
   /* Focus styles for accessibility */
   *:focus-visible {
-    @apply outline-none ring-2 ring-primary-500 ring-offset-2;
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2;
   }
   
   /* Custom scrollbar */
@@ -40,109 +42,129 @@
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-gray-400;
   }
+
+  /* Mobile-first touch targets */
+  button, input, select, textarea {
+    min-height: 44px;
+  }
+
+  /* Improved text rendering */
+  h1, h2, h3, h4, h5, h6 {
+    text-rendering: optimizeLegibility;
+  }
 }
 
 @layer components {
+  /* Professional Design System */
+  
   /* Glass morphism effect */
   .glass {
-    @apply bg-white/80 backdrop-blur-sm border border-white/20;
+    @apply bg-white/90 backdrop-blur-md border border-white/30 shadow-xl;
   }
   
-  /* Modern card component */
+  /* Modern card components */
   .card {
-    @apply bg-white rounded-2xl shadow-soft border border-gray-100 p-6;
+    @apply bg-white rounded-3xl shadow-lg border border-gray-100/50 p-6 backdrop-blur-sm;
   }
   
-  .card-hover {
-    @apply card transition-all duration-300 hover:shadow-medium hover:-translate-y-1;
+  .card-elevated {
+    @apply card shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1;
   }
   
-  /* Button components */
+  .card-interactive {
+    @apply card-elevated cursor-pointer hover:scale-[1.02] active:scale-[0.98];
+  }
+  
+  /* Professional button system */
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center justify-center px-6 py-3 text-base font-semibold rounded-2xl transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95;
   }
   
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-sm hover:shadow-md;
+    @apply btn bg-gradient-to-r from-blue-600 to-indigo-700 text-white hover:from-blue-700 hover:to-indigo-800 focus:ring-blue-500/50 shadow-lg hover:shadow-xl;
   }
   
   .btn-secondary {
-    @apply btn bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500 border border-gray-200;
+    @apply btn bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-500/50 border-2 border-gray-200 hover:border-gray-300 shadow-md hover:shadow-lg;
   }
   
   .btn-success {
-    @apply btn bg-success-600 text-white hover:bg-success-700 focus:ring-success-500 shadow-sm hover:shadow-md;
+    @apply btn bg-gradient-to-r from-emerald-600 to-green-700 text-white hover:from-emerald-700 hover:to-green-800 focus:ring-emerald-500/50 shadow-lg hover:shadow-xl;
   }
   
-  .btn-error {
-    @apply btn bg-error-600 text-white hover:bg-error-700 focus:ring-error-500 shadow-sm hover:shadow-md;
+  .btn-danger {
+    @apply btn bg-gradient-to-r from-red-600 to-rose-700 text-white hover:from-red-700 hover:to-rose-800 focus:ring-red-500/50 shadow-lg hover:shadow-xl;
   }
   
   .btn-lg {
-    @apply px-6 py-3 text-base;
+    @apply px-8 py-4 text-lg;
   }
   
   .btn-sm {
-    @apply px-3 py-1.5 text-xs;
+    @apply px-4 py-2 text-sm;
   }
   
-  /* Form components */
+  /* Professional form components */
   .form-input {
-    @apply w-full px-4 py-3 border border-gray-300 rounded-xl bg-white text-gray-900 placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+    @apply w-full px-4 py-4 border-2 border-gray-200 rounded-2xl bg-white text-gray-900 placeholder-gray-400 focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-300 text-base;
+  }
+  
+  .form-input-error {
+    @apply form-input border-red-300 bg-red-50/50 focus:ring-red-500/20 focus:border-red-500;
   }
   
   .form-label {
-    @apply block text-sm font-medium text-gray-700 mb-2;
+    @apply block text-sm font-semibold text-gray-700 mb-3;
   }
   
   .form-error {
-    @apply text-sm text-error-600 mt-1;
+    @apply text-sm text-red-600 mt-2 font-medium;
   }
   
   .form-success {
-    @apply text-sm text-success-600 mt-1;
+    @apply text-sm text-emerald-600 mt-2 font-medium;
   }
   
   /* Status indicators */
   .status-success {
-    @apply bg-success-50 text-success-700 border border-success-200 rounded-lg p-3;
+    @apply bg-emerald-50 text-emerald-800 border-2 border-emerald-200 rounded-2xl p-4;
   }
   
   .status-error {
-    @apply bg-error-50 text-error-700 border border-error-200 rounded-lg p-3;
+    @apply bg-red-50 text-red-800 border-2 border-red-200 rounded-2xl p-4;
   }
   
   .status-warning {
-    @apply bg-warning-50 text-warning-700 border border-warning-200 rounded-lg p-3;
+    @apply bg-amber-50 text-amber-800 border-2 border-amber-200 rounded-2xl p-4;
   }
   
   .status-info {
-    @apply bg-primary-50 text-primary-700 border border-primary-200 rounded-lg p-3;
+    @apply bg-blue-50 text-blue-800 border-2 border-blue-200 rounded-2xl p-4;
   }
   
-  /* Typography */
+  /* Professional typography */
   .heading-1 {
-    @apply text-4xl font-bold text-gray-900 tracking-tight;
+    @apply text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 tracking-tight leading-tight;
   }
   
   .heading-2 {
-    @apply text-3xl font-semibold text-gray-900 tracking-tight;
+    @apply text-3xl md:text-4xl font-bold text-gray-900 tracking-tight leading-tight;
   }
   
   .heading-3 {
-    @apply text-2xl font-semibold text-gray-900 tracking-tight;
+    @apply text-2xl md:text-3xl font-semibold text-gray-900 tracking-tight;
   }
   
   .heading-4 {
-    @apply text-xl font-semibold text-gray-900 tracking-tight;
+    @apply text-xl md:text-2xl font-semibold text-gray-900 tracking-tight;
   }
   
   .text-body {
-    @apply text-base text-gray-600 leading-relaxed;
+    @apply text-base md:text-lg text-gray-600 leading-relaxed;
   }
   
   .text-caption {
-    @apply text-sm text-gray-500;
+    @apply text-sm text-gray-500 font-medium;
   }
   
   /* Layout utilities */
@@ -151,20 +173,46 @@
   }
   
   .section-padding {
-    @apply py-16 sm:py-20 lg:py-24;
+    @apply py-12 sm:py-16 lg:py-20;
+  }
+  
+  /* Progress indicators */
+  .progress-bar {
+    @apply w-full bg-gray-200 rounded-full h-3 overflow-hidden;
+  }
+  
+  .progress-fill {
+    @apply h-full bg-gradient-to-r from-blue-600 to-indigo-700 rounded-full transition-all duration-500 ease-out;
+  }
+  
+  /* Step indicators */
+  .step-indicator {
+    @apply flex items-center justify-center w-12 h-12 rounded-full border-2 font-semibold text-sm transition-all duration-300;
+  }
+  
+  .step-active {
+    @apply step-indicator bg-blue-600 border-blue-600 text-white shadow-lg;
+  }
+  
+  .step-completed {
+    @apply step-indicator bg-emerald-600 border-emerald-600 text-white shadow-lg;
+  }
+  
+  .step-pending {
+    @apply step-indicator bg-white border-gray-300 text-gray-400;
   }
   
   /* Animation utilities */
   .animate-fade-in {
-    animation: fadeIn 0.5s ease-in-out;
+    animation: fadeIn 0.6s ease-out;
   }
   
   .animate-slide-up {
-    animation: slideUp 0.3s ease-out;
+    animation: slideUp 0.4s ease-out;
   }
   
   .animate-scale-in {
-    animation: scaleIn 0.2s ease-out;
+    animation: scaleIn 0.3s ease-out;
   }
   
   .animate-shake {
@@ -176,11 +224,15 @@
   }
   
   .animate-slide-in-left {
-    animation: slideInLeft 0.3s ease-out;
+    animation: slideInLeft 0.4s ease-out;
   }
   
   .animate-slide-in-right {
-    animation: slideInRight 0.3s ease-out;
+    animation: slideInRight 0.4s ease-out;
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
 
