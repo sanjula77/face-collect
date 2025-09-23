@@ -387,43 +387,10 @@ export default function IntegratedFaceCapture({
         )}
 
         {currentStep === "face_capture" && (
-          <div>
-            {/* Enhanced User Info Card */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 mb-8 border border-blue-100 shadow-lg">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-lg">
-                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-xl font-bold text-blue-900 mb-2">
-                    {userData?.name}
-                  </h3>
-                  <div className="flex flex-wrap gap-4 text-sm">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                      <span className="text-blue-700 font-medium">Age: {userData?.age}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
-                      <span className="text-blue-700 font-medium">Gender: {userData?.gender}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="hidden sm:block">
-                  <div className="bg-white/60 backdrop-blur-sm rounded-xl px-4 py-2 border border-blue-200">
-                    <div className="text-xs text-blue-600 font-semibold uppercase tracking-wide">Ready for Capture</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <EasyFaceCapture
-              onCaptureComplete={handleFaceCaptureComplete}
-              onError={handleFaceCaptureError}
-            />
-          </div>
+          <EasyFaceCapture
+            onCaptureComplete={handleFaceCaptureComplete}
+            onError={handleFaceCaptureError}
+          />
         )}
 
         {currentStep === "processing" && (
