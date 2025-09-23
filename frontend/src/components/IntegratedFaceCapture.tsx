@@ -347,7 +347,7 @@ export default function IntegratedFaceCapture({
   // ============================================================================
 
   return (
-    <div className={`w-full max-w-5xl mx-auto ${className}`}>
+    <div className={`w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 ${className}`}>
       {/* Header */}
       <div className="text-center mb-8">
         <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-2xl mb-4 shadow-lg">
@@ -388,20 +388,33 @@ export default function IntegratedFaceCapture({
 
         {currentStep === "face_capture" && (
           <div>
-            <div className="bg-blue-50 rounded-xl p-4 mb-8">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {/* Enhanced User Info Card */}
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 mb-8 border border-blue-100 shadow-lg">
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-lg">
+                  <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                 </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-blue-800 mb-1">
-                    User: {userData?.name}
+                <div className="flex-1">
+                  <h3 className="text-xl font-bold text-blue-900 mb-2">
+                    {userData?.name}
                   </h3>
-                  <p className="text-sm text-blue-700">
-                    Age: {userData?.age} • Gender: {userData?.gender}
-                  </p>
+                  <div className="flex flex-wrap gap-4 text-sm">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-blue-700 font-medium">Age: {userData?.age}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                      <span className="text-blue-700 font-medium">Gender: {userData?.gender}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="hidden sm:block">
+                  <div className="bg-white/60 backdrop-blur-sm rounded-xl px-4 py-2 border border-blue-200">
+                    <div className="text-xs text-blue-600 font-semibold uppercase tracking-wide">Ready for Capture</div>
+                  </div>
                 </div>
               </div>
             </div>

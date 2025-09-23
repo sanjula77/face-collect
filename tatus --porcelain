@@ -1,0 +1,24 @@
+[33mcommit af8323b00133d7eca63459a35e094aee4036e10f[m
+Author: sanjula77 <sanjulagihan94@gmail.com>
+Date:   Tue Sep 23 17:59:38 2025 +0530
+
+    feat: implement mobile-first redesign for Face Collect application
+    
+    - Introduced a comprehensive mobile-first design for the Face Collect app, enhancing user experience on mobile devices.
+    - Added new components: MobileNavbar, LandingSection, MobileConsentForm, StepNavigation, IntegratedFaceCapture, and ConfirmationScreen.
+    - Updated global styles for mobile optimization, including touch targets and responsive layouts.
+    - Implemented a step-by-step user flow with clear navigation and progress tracking.
+    - Ensured accessibility compliance and improved performance with mobile-specific optimizations.
+    - Maintained backward compatibility with existing functionality while enhancing the overall user experience.
+
+frontend/MOBILE_REDESIGN.md
+frontend/src/app/globals.css
+frontend/src/app/page.module.css
+frontend/src/app/page.tsx
+frontend/src/components/ConfirmationScreen.tsx
+frontend/src/components/IntegratedFaceCapture.tsx
+frontend/src/components/LandingSection.tsx
+frontend/src/components/MobileConsentForm.tsx
+frontend/src/components/MobileNavbar.tsx
+frontend/src/components/StepNavigation.tsx
+frontend/src/components/UserDataForm.tsx

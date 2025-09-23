@@ -155,7 +155,7 @@
   }
   
   .status-error {
-    @apply bg-red-50 text-red-800 border-2 border-red-200 rounded-2xl p-4;
+    @apply bg-red-50 text-red-800 border-2 border-red-200 rounded-2xl p-4 shadow-lg;
   }
   
   .status-warning {
@@ -296,6 +296,25 @@
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Mobile-optimized face capture layout */
+  .face-capture-container {
+    @apply min-h-screen flex flex-col;
+  }
+
+  .face-capture-content {
+    @apply flex-1 flex flex-col justify-center;
+  }
+
+  /* Enhanced error message styling */
+  .error-message-prominent {
+    @apply bg-red-50 text-red-800 border-2 border-red-300 rounded-2xl p-4 shadow-lg animate-shake;
+  }
+
+  /* Better mobile spacing */
+  .mobile-spacing {
+    @apply space-y-4 sm:space-y-6;
   }
 }
 

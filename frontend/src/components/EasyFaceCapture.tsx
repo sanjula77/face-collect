@@ -281,7 +281,7 @@ export default function EasyFaceCapture({
   // ============================================================================
 
   return (
-    <div className={`flex flex-col items-center space-y-8 w-full max-w-2xl mx-auto ${className}`}>
+    <div className={`flex flex-col items-center mobile-spacing w-full max-w-2xl mx-auto ${className}`}>
       {/* Main Video Container */}
       <div className="relative w-full max-w-md aspect-square bg-gray-900 rounded-2xl overflow-hidden shadow-lg">
         <video
@@ -349,6 +349,20 @@ export default function EasyFaceCapture({
             <p className="text-caption text-blue-600">
               When ready, click "Capture" below
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Error Message - Fixed positioning to be visible */}
+      {state.errorMessage && (
+        <div className="w-full">
+          <div className="error-message-prominent">
+            <div className="flex items-center space-x-3">
+              <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-red-800 font-semibold">{state.errorMessage}</p>
+            </div>
           </div>
         </div>
       )}
@@ -444,16 +458,18 @@ export default function EasyFaceCapture({
         )}
       </div>
 
-      {/* Status Message */}
-      <div className="text-center min-h-[3rem]">
-        <p className={`text-base font-semibold ${state.status === "error" ? "text-red-600" :
-          state.status === "completed" ? "text-emerald-600" :
-            state.status === "camera_ready" ? "text-emerald-600" :
-              "text-gray-700"
-          }`}>
-          {getStatusMessage()}
-        </p>
-      </div>
+      {/* Status Message - Only show when no error message */}
+      {!state.errorMessage && (
+        <div className="text-center min-h-[2rem]">
+          <p className={`text-base font-semibold ${state.status === "error" ? "text-red-600" :
+            state.status === "completed" ? "text-emerald-600" :
+              state.status === "camera_ready" ? "text-emerald-600" :
+                "text-gray-700"
+            }`}>
+            {getStatusMessage()}
+          </p>
+        </div>
+      )}
 
       {/* Captured Results Preview */}
       {state.capturedResults.length > 0 && (
