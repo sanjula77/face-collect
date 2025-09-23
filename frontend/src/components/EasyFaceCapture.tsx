@@ -155,6 +155,13 @@ export default function EasyFaceCapture({
     }
 
     try {
+      // Clear any previous messages
+      setState(prev => ({
+        ...prev,
+        errorMessage: null,
+        successMessage: null,
+      }));
+
       // Check if face is detected
       const detection = await detectFace(videoRef.current);
       if (!detection) {
@@ -209,6 +216,14 @@ export default function EasyFaceCapture({
           ...prev,
           successMessage: `Great! Now move to: ${nextStep}`,
         }));
+
+        // Clear success message after 3 seconds to show next instructions
+        setTimeout(() => {
+          setState(prev => ({
+            ...prev,
+            successMessage: null,
+          }));
+        }, 3000);
       }
 
     } catch (error) {
@@ -339,48 +354,49 @@ export default function EasyFaceCapture({
         )}
       </div>
 
-      {/* Instructions */}
+      {/* Dynamic Message Box - Shows instructions, success, or error */}
       {state.status === "capturing" && (
-        <div className="status-info w-full">
-          <div className="text-center">
-            <h3 className="text-lg sm:text-xl md:text-2xl font-semibold mb-2 sm:mb-3 text-blue-800">
-              {getStepIcon(CAPTURE_STEPS[state.currentStep])} {CAPTURE_STEPS[state.currentStep]}
-            </h3>
-            <p className="text-sm sm:text-base md:text-lg text-blue-700 mb-1 sm:mb-2">
-              {getStepInstructions(CAPTURE_STEPS[state.currentStep])}
-            </p>
-            <p className="text-xs sm:text-sm text-blue-600">
-              Click "Capture" when ready
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Success Message - Green styling */}
-      {state.successMessage && (
         <div className="w-full">
-          <div className="bg-emerald-50 text-emerald-800 border-2 border-emerald-300 rounded-2xl p-4 shadow-lg animate-bounce-in">
-            <div className="flex items-center space-x-3">
-              <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-emerald-800 font-semibold">{state.successMessage}</p>
+          {/* Success Message */}
+          {state.successMessage && (
+            <div className="bg-emerald-50 text-emerald-800 border-2 border-emerald-300 rounded-2xl p-4 shadow-lg animate-bounce-in">
+              <div className="flex items-center space-x-3">
+                <svg className="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-emerald-800 font-semibold">{state.successMessage}</p>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* Error Message - Fixed positioning to be visible */}
-      {state.errorMessage && (
-        <div className="w-full">
-          <div className="error-message-prominent">
-            <div className="flex items-center space-x-3">
-              <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-red-800 font-semibold">{state.errorMessage}</p>
+          {/* Error Message */}
+          {state.errorMessage && (
+            <div className="error-message-prominent">
+              <div className="flex items-center space-x-3">
+                <svg className="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-red-800 font-semibold">{state.errorMessage}</p>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Instructions - Only show when no success/error message */}
+          {!state.successMessage && !state.errorMessage && (
+            <div className="bg-blue-50 text-blue-800 border-2 border-blue-200 rounded-2xl p-4 shadow-lg w-full">
+              <div className="text-center">
+                <h3 className="text-lg sm:text-xl md:text-2xl font-semibold mb-2 sm:mb-3 text-blue-800">
+                  {getStepIcon(CAPTURE_STEPS[state.currentStep])} {CAPTURE_STEPS[state.currentStep]}
+                </h3>
+                <p className="text-sm sm:text-base md:text-lg text-blue-700 mb-1 sm:mb-2">
+                  {getStepInstructions(CAPTURE_STEPS[state.currentStep])}
+                </p>
+                <p className="text-xs sm:text-sm text-blue-600">
+                  Click "Capture" when ready
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -475,8 +491,8 @@ export default function EasyFaceCapture({
         )}
       </div>
 
-      {/* Status Message - Only show when no error or success message */}
-      {!state.errorMessage && !state.successMessage && (
+      {/* Status Message - Only show when not capturing (since capturing uses dynamic box) */}
+      {state.status !== "capturing" && (
         <div className="text-center min-h-[2rem]">
           <p className={`text-base font-semibold ${state.status === "error" ? "text-red-600" :
             state.status === "completed" ? "text-emerald-600" :
