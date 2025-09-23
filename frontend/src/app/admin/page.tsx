@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { getUsers, getCaptureSessions, getDatabaseStats, deleteUser, getCaptureSessionWithImages, getAllFaceImagesWithMetadata, getUserFaceImagesWithMetadata } from "@/lib/database";
 import type { UserRecord, CaptureSessionRecord, FaceImageRecord, FaceMetadataRecord } from "@/lib/database";
 import AdminLogin from "@/components/AdminLogin";
-import QualityDebugInfo from "@/components/QualityDebugInfo";
 
 /**
  * Admin Panel: Professional admin interface for managing face collection data

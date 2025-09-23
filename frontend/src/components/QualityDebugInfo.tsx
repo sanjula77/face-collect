@@ -27,7 +27,7 @@ export default function QualityDebugInfo({ userId }: QualityDebugInfoProps) {
                 });
             } catch (error) {
                 console.error('Debug info error:', error);
-                setDebugInfo({ error: error.message });
+                setDebugInfo({ error: error instanceof Error ? error.message : 'Unknown error' });
             } finally {
                 setLoading(false);
             }
