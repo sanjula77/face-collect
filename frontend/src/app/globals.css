@@ -53,6 +53,25 @@
     min-height: 44px;
   }
 
+  /* Mobile-specific optimizations */
+  @media (max-width: 768px) {
+    /* Prevent zoom on input focus */
+    input, select, textarea {
+      font-size: 16px;
+    }
+    
+    /* Improve touch scrolling */
+    body {
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Optimize for mobile viewport */
+    .min-h-screen {
+      min-height: 100vh;
+      min-height: 100dvh; /* Dynamic viewport height for mobile */
+    }
+  }
+
   /* Improved text rendering */
   h1, h2, h3, h4, h5, h6 {
     text-rendering: optimizeLegibility;
@@ -261,6 +280,22 @@
   
   .space-y-custom-lg > * + * {
     @apply mt-8;
+  }
+
+  /* Mobile-first sticky bottom utilities */
+  .sticky-bottom {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+  }
+
+  /* Safe area padding for mobile devices */
+  .safe-area-padding {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }
 

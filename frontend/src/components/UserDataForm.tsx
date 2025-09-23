@@ -154,16 +154,6 @@ export default function UserDataForm({
 
   return (
     <div className={`w-full px-4 ${className}`}>
-      {/* Mobile-First Header */}
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          User Information
-        </h2>
-        <p className="text-base text-gray-600">
-          Tell us a bit about yourself to get started
-        </p>
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Full Name Field */}
         <div className="space-y-2">
