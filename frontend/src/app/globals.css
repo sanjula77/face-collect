@@ -7,6 +7,11 @@
     @apply border-gray-200;
   }
   
+  /* Override for consent form cards */
+  .consent-card {
+    @apply border-gray-200 !important;
+  }
+  
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
