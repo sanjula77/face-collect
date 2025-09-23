@@ -39,7 +39,7 @@ export default function Home() {
       case "landing": return 0;
       case "consent": return 1;
       case "face_capture": return 2;
-      case "confirmation": return 3;
+      case "confirmation": return 4; // Show as completed (step 4 of 4)
       default: return 0;
     }
   };
