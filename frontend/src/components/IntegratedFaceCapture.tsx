@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { loadModels, detectFace } from "@/lib/faceApi";
-import { createUser, createCaptureSession, updateCaptureSession, saveFaceImage } from "@/lib/database";
+import { createUser, createCaptureSession, updateCaptureSession, saveFaceImage, saveFaceMetadata } from "@/lib/database";
 import UserDataForm from "./UserDataForm";
 import EasyFaceCapture from "./EasyFaceCapture";
 import type { UserData } from "./UserDataForm";
@@ -153,7 +153,7 @@ export default function IntegratedFaceCapture({
           });
 
           // Save image to database
-          await saveFaceImage({
+          const savedImage = await saveFaceImage({
             userId: userIdRef.current,
             sessionId: sessionIdRef.current,
             step: result.step,
@@ -167,6 +167,26 @@ export default function IntegratedFaceCapture({
               processing_time: Date.now() - result.timestamp
             }
           });
+
+          // Save quality metadata if available
+          if (result.qualityMetrics) {
+            try {
+              await saveFaceMetadata({
+                faceImageId: savedImage.id,
+                qualityOverall: result.qualityMetrics.overall,
+                qualityFaceSize: result.qualityMetrics.faceSize.level,
+                qualitySharpness: result.qualityMetrics.sharpness.level,
+                qualityLighting: result.qualityMetrics.lighting.level,
+                faceWidth: Math.round(result.qualityMetrics.faceSize.width),
+                faceHeight: Math.round(result.qualityMetrics.faceSize.height),
+                sharpnessVariance: result.qualityMetrics.sharpness.variance,
+                brightnessValue: result.qualityMetrics.lighting.brightness,
+              });
+            } catch (metadataError) {
+              console.warn('Failed to save quality metadata (table may not exist yet):', metadataError);
+              // Continue without failing the entire capture process
+            }
+          }
 
           successfulImages++;
         } catch (imageError) {
@@ -458,6 +478,25 @@ export default function IntegratedFaceCapture({
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Images:</span>
                   <span className="font-semibold text-gray-900">{captureResults.length} captured</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Quality Summary:</span>
+                  <div className="flex space-x-2">
+                    {captureResults.map((result, index) => (
+                      result.qualityMetrics && (
+                        <span
+                          key={index}
+                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${result.qualityMetrics.overall === 'High' ? 'bg-green-100 text-green-800' :
+                            result.qualityMetrics.overall === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}
+                        >
+                          {result.qualityMetrics.overall === 'High' ? '✅' :
+                            result.qualityMetrics.overall === 'Medium' ? '⚠️' : '❌'}
+                        </span>
+                      )
+                    ))}
+                  </div>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Status:</span>

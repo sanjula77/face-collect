@@ -38,6 +38,20 @@ export interface FaceImageRecord {
   };
 }
 
+export interface FaceMetadataRecord {
+  id: string;
+  face_image_id: string;
+  quality_overall: 'High' | 'Medium' | 'Low';
+  quality_face_size: 'High' | 'Medium' | 'Low';
+  quality_sharpness: 'High' | 'Medium' | 'Low';
+  quality_lighting: 'High' | 'Medium' | 'Low';
+  face_width: number;
+  face_height: number;
+  sharpness_variance: number;
+  brightness_value: number;
+  created_at: string;
+}
+
 export interface CaptureSessionRecord {
   id: string;
   user_id: string;
@@ -85,6 +99,21 @@ CREATE TABLE face_images (
   metadata JSONB
 );
 
+-- Face metadata table for quality assessment
+CREATE TABLE face_metadata (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  face_image_id UUID NOT NULL REFERENCES face_images(id) ON DELETE CASCADE,
+  quality_overall VARCHAR(10) NOT NULL CHECK (quality_overall IN ('High', 'Medium', 'Low')),
+  quality_face_size VARCHAR(10) NOT NULL CHECK (quality_face_size IN ('High', 'Medium', 'Low')),
+  quality_sharpness VARCHAR(10) NOT NULL CHECK (quality_sharpness IN ('High', 'Medium', 'Low')),
+  quality_lighting VARCHAR(10) NOT NULL CHECK (quality_lighting IN ('High', 'Medium', 'Low')),
+  face_width INTEGER NOT NULL,
+  face_height INTEGER NOT NULL,
+  sharpness_variance DECIMAL(10,2) NOT NULL,
+  brightness_value DECIMAL(10,2) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Capture sessions table
 CREATE TABLE capture_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -103,6 +132,8 @@ CREATE INDEX idx_users_created_at ON users(created_at);
 CREATE INDEX idx_users_status ON users(status);
 CREATE INDEX idx_face_images_user_id ON face_images(user_id);
 CREATE INDEX idx_face_images_step ON face_images(step);
+CREATE INDEX idx_face_metadata_face_image_id ON face_metadata(face_image_id);
+CREATE INDEX idx_face_metadata_quality_overall ON face_metadata(quality_overall);
 CREATE INDEX idx_capture_sessions_user_id ON capture_sessions(user_id);
 CREATE INDEX idx_capture_sessions_status ON capture_sessions(status);
 */
@@ -287,6 +318,48 @@ export async function saveFaceImage(imageData: {
 }
 
 /**
+ * Save face metadata to database
+ */
+export async function saveFaceMetadata(metadataData: {
+  faceImageId: string;
+  qualityOverall: 'High' | 'Medium' | 'Low';
+  qualityFaceSize: 'High' | 'Medium' | 'Low';
+  qualitySharpness: 'High' | 'Medium' | 'Low';
+  qualityLighting: 'High' | 'Medium' | 'Low';
+  faceWidth: number;
+  faceHeight: number;
+  sharpnessVariance: number;
+  brightnessValue: number;
+}): Promise<FaceMetadataRecord> {
+  try {
+    const { data, error } = await supabase
+      .from('face_metadata')
+      .insert([{
+        face_image_id: metadataData.faceImageId,
+        quality_overall: metadataData.qualityOverall,
+        quality_face_size: metadataData.qualityFaceSize,
+        quality_sharpness: metadataData.qualitySharpness,
+        quality_lighting: metadataData.qualityLighting,
+        face_width: metadataData.faceWidth,
+        face_height: metadataData.faceHeight,
+        sharpness_variance: metadataData.sharpnessVariance,
+        brightness_value: metadataData.brightnessValue,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to save face metadata: ${error.message}`);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error saving face metadata:', error);
+    throw error;
+  }
+}
+
+/**
  * Get face images for a user
  */
 export async function getUserFaceImages(userId: string): Promise<FaceImageRecord[]> {
@@ -304,6 +377,76 @@ export async function getUserFaceImages(userId: string): Promise<FaceImageRecord
     return data || [];
   } catch (error) {
     console.error('Error getting face images:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get face images with metadata for a user
+ */
+export async function getUserFaceImagesWithMetadata(userId: string): Promise<(FaceImageRecord & { metadata: FaceMetadataRecord | null })[]> {
+  try {
+    const { data, error } = await supabase
+      .from('face_images')
+      .select(`
+        *,
+        metadata:face_metadata(*)
+      `)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      throw new Error(`Failed to get face images with metadata: ${error.message}`);
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error getting face images with metadata:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get all face images with metadata and user info for admin panel
+ */
+export async function getAllFaceImagesWithMetadata(page: number = 1, limit: number = 20, qualityFilter?: 'High' | 'Medium' | 'Low'): Promise<{
+  images: (FaceImageRecord & { 
+    user: UserRecord; 
+    metadata: FaceMetadataRecord | null;
+  })[];
+  total: number;
+}> {
+  try {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let query = supabase
+      .from('face_images')
+      .select(`
+        *,
+        user:users(*),
+        metadata:face_metadata(*)
+      `, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    // Apply quality filter if provided
+    if (qualityFilter) {
+      query = query.eq('metadata.quality_overall', qualityFilter);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      throw new Error(`Failed to get face images with metadata: ${error.message}`);
+    }
+
+    return {
+      images: data || [],
+      total: count || 0
+    };
+  } catch (error) {
+    console.error('Error getting face images with metadata:', error);
     throw error;
   }
 }

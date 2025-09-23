@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { loadModels, detectFace } from "@/lib/faceApi";
+import { analyzeImageQuality, getQualityColor, getQualityIcon, getQualitySummary, type QualityMetrics } from "@/lib/qualityCheck";
 
 /**
  * EasyFaceCapture: Manual capture approach - much more reliable!
@@ -22,6 +23,7 @@ export interface EasyCaptureResult {
   step: CaptureStep;
   imageData: string;
   timestamp: number;
+  qualityMetrics?: QualityMetrics;
 }
 
 export interface EasyFaceCaptureProps {
@@ -188,11 +190,21 @@ export default function EasyFaceCapture({
       ctx.drawImage(videoRef.current, 0, 0);
       const imageData = canvasRef.current.toDataURL("image/png");
 
+      // Analyze image quality
+      const faceBox = detection.detection.box;
+      const qualityMetrics = await analyzeImageQuality(imageData, {
+        x: faceBox.x,
+        y: faceBox.y,
+        width: faceBox.width,
+        height: faceBox.height,
+      });
+
       // Create capture result
       const captureResult: EasyCaptureResult = {
         step: currentStep,
         imageData,
         timestamp: Date.now(),
+        qualityMetrics,
       };
 
       // Update state
@@ -214,7 +226,7 @@ export default function EasyFaceCapture({
         console.log(`⏳ Next step: ${nextStep}`);
         setState(prev => ({
           ...prev,
-          successMessage: `Great! Now move to: ${nextStep}`,
+          successMessage: `Great! Quality: ${qualityMetrics.overall} ${getQualityIcon(qualityMetrics.overall)} Now move to: ${nextStep}`,
         }));
 
         // Clear success message after 3 seconds to show next instructions
@@ -519,6 +531,12 @@ export default function EasyFaceCapture({
                 <div className="text-caption">
                   <p className="font-semibold text-gray-800">{result.step}</p>
                   <p className="text-gray-500">Step {index + 1}</p>
+                  {result.qualityMetrics && (
+                    <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium mt-2 ${getQualityColor(result.qualityMetrics.overall)}`}>
+                      <span className="mr-1">{getQualityIcon(result.qualityMetrics.overall)}</span>
+                      {result.qualityMetrics.overall}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

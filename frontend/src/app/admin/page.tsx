@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getUsers, getCaptureSessions, getDatabaseStats, deleteUser, getCaptureSessionWithImages } from "@/lib/database";
-import type { UserRecord, CaptureSessionRecord } from "@/lib/database";
+import { getUsers, getCaptureSessions, getDatabaseStats, deleteUser, getCaptureSessionWithImages, getAllFaceImagesWithMetadata, getUserFaceImagesWithMetadata } from "@/lib/database";
+import type { UserRecord, CaptureSessionRecord, FaceImageRecord, FaceMetadataRecord } from "@/lib/database";
 import AdminLogin from "@/components/AdminLogin";
+import QualityDebugInfo from "@/components/QualityDebugInfo";
 
 /**
  * Admin Panel: Professional admin interface for managing face collection data
@@ -42,12 +43,16 @@ export default function AdminPage() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [sessions, setSessions] = useState<(CaptureSessionRecord & { user: UserRecord })[]>([]);
+  const [images, setImages] = useState<(FaceImageRecord & { user: UserRecord; metadata: FaceMetadataRecord | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [selectedSessionImages, setSelectedSessionImages] = useState<any[]>([]);
   const [selectedSession, setSelectedSession] = useState<any>(null);
+  const [qualityFilter, setQualityFilter] = useState<'High' | 'Medium' | 'Low' | 'All'>('All');
+  const [selectedUserImages, setSelectedUserImages] = useState<any[]>([]);
+  const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
 
   // ============================================================================
   // DATA FETCHING
@@ -83,6 +88,16 @@ export default function AdminPage() {
     }
   };
 
+  const loadImages = async (page: number = 1, qualityFilter?: 'High' | 'Medium' | 'Low') => {
+    try {
+      const { images: imagesData } = await getAllFaceImagesWithMetadata(page, itemsPerPage, qualityFilter);
+      setImages(imagesData);
+    } catch (error) {
+      console.error("Error loading images:", error);
+      setError("Failed to load face images");
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     setError(null);
@@ -91,7 +106,8 @@ export default function AdminPage() {
       await Promise.all([
         loadStats(),
         loadUsers(currentPage),
-        loadSessions(currentPage)
+        loadSessions(currentPage),
+        loadImages(currentPage, qualityFilter === 'All' ? undefined : qualityFilter as 'High' | 'Medium' | 'Low')
       ]);
     } catch (error) {
       console.error("Error loading data:", error);
@@ -117,7 +133,7 @@ export default function AdminPage() {
     if (isAuthenticated) {
       loadData();
     }
-  }, [currentPage, isAuthenticated]);
+  }, [currentPage, isAuthenticated, qualityFilter]);
 
   // ============================================================================
   // HANDLERS
@@ -154,6 +170,22 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error loading session images:', error);
       setError('Failed to load session images');
+    }
+  };
+
+  const loadUserImages = async (userId: string) => {
+    try {
+      const userImages = await getUserFaceImagesWithMetadata(userId);
+      const user = users.find(u => u.id === userId);
+      if (user) {
+        console.log('Loaded user images:', userImages); // Debug log
+        setSelectedUser(user);
+        setSelectedUserImages(userImages);
+        setActiveTab('images');
+      }
+    } catch (error) {
+      console.error('Error loading user images:', error);
+      setError('Failed to load user images');
     }
   };
 
@@ -200,6 +232,24 @@ export default function AdminPage() {
       case 'Up': return '👆';
       case 'Down': return '👇';
       default: return '👤';
+    }
+  };
+
+  const getQualityColor = (level: 'High' | 'Medium' | 'Low') => {
+    switch (level) {
+      case 'High': return 'bg-green-100 text-green-800';
+      case 'Medium': return 'bg-yellow-100 text-yellow-800';
+      case 'Low': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getQualityIcon = (level: 'High' | 'Medium' | 'Low') => {
+    switch (level) {
+      case 'High': return '✅';
+      case 'Medium': return '⚠️';
+      case 'Low': return '❌';
+      default: return '❓';
     }
   };
 
@@ -272,8 +322,8 @@ export default function AdminPage() {
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id as any)}
                 className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
               >
                 <span className="mr-2">{tab.icon}</span>
@@ -428,6 +478,7 @@ export default function AdminPage() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Images</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
@@ -452,6 +503,17 @@ export default function AdminPage() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           {getStatusBadge(user.status)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => loadUserImages(user.id)}
+                            className="text-blue-600 hover:text-blue-900 flex items-center"
+                          >
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            View Images
+                          </button>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <button
@@ -542,18 +604,41 @@ export default function AdminPage() {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-800">
-                {selectedSession ? `Images for ${selectedSession.user?.name}` : 'Captured Images'}
+                {selectedSession ? `Images for ${selectedSession.user?.name}` :
+                  selectedUser ? `Images for ${selectedUser.name}` : 'Captured Images'}
               </h2>
-              <button
-                onClick={() => {
-                  setActiveTab('sessions');
-                  setSelectedSession(null);
-                  setSelectedSessionImages([]);
-                }}
-                className="text-blue-600 hover:text-blue-800 font-medium"
-              >
-                ← Back to Sessions
-              </button>
+              <div className="flex items-center space-x-4">
+                {!selectedSession && !selectedUser && (
+                  <select
+                    value={qualityFilter}
+                    onChange={(e) => setQualityFilter(e.target.value as 'High' | 'Medium' | 'Low' | 'All')}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="All">All Quality</option>
+                    <option value="High">High Quality</option>
+                    <option value="Medium">Medium Quality</option>
+                    <option value="Low">Low Quality</option>
+                  </select>
+                )}
+                <button
+                  onClick={() => {
+                    if (selectedSession) {
+                      setActiveTab('sessions');
+                      setSelectedSession(null);
+                      setSelectedSessionImages([]);
+                    } else if (selectedUser) {
+                      setActiveTab('users');
+                      setSelectedUser(null);
+                      setSelectedUserImages([]);
+                    } else {
+                      setActiveTab('sessions');
+                    }
+                  }}
+                  className="text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  ← Back to {selectedSession ? 'Sessions' : selectedUser ? 'Users' : 'Sessions'}
+                </button>
+              </div>
             </div>
 
             {selectedSession ? (
@@ -588,21 +673,72 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {selectedSessionImages.map((image, index) => (
                     <div key={image.id} className="bg-white rounded-lg shadow overflow-hidden">
-                      <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                         <img
                           src={image.image_data}
                           alt={`${image.step} pose`}
                           className="w-full h-full object-cover"
                         />
+                        {image.metadata && Array.isArray(image.metadata) && image.metadata[0] && (
+                          <div className="absolute top-2 right-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getQualityColor(image.metadata[0].quality_overall)}`}>
+                              <span className="mr-1">{getQualityIcon(image.metadata[0].quality_overall)}</span>
+                              {image.metadata[0].quality_overall}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="p-4">
                         <h4 className="font-semibold text-gray-800 mb-2">
                           {getStepIcon(image.step)} {image.step} Pose
                         </h4>
-                        <div className="text-sm text-gray-600 space-y-1">
-                          <p>Size: {image.width} × {image.height}</p>
-                          <p>File: {(image.file_size / 1024).toFixed(1)} KB</p>
-                          <p>Captured: {formatDate(image.created_at)}</p>
+                        <div className="text-sm text-gray-600 space-y-2">
+                          <div className="flex justify-between">
+                            <span>Size:</span>
+                            <span className="font-medium">{image.width} × {image.height}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>File:</span>
+                            <span className="font-medium">{(image.file_size / 1024).toFixed(1)} KB</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Captured:</span>
+                            <span className="font-medium">{formatDate(image.created_at)}</span>
+                          </div>
+
+                          {image.metadata && Array.isArray(image.metadata) && image.metadata[0] && (
+                            <>
+                              <div className="pt-2 border-t border-gray-200">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="font-medium text-gray-700">Quality:</span>
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getQualityColor(image.metadata[0].quality_overall)}`}>
+                                    <span className="mr-1">{getQualityIcon(image.metadata[0].quality_overall)}</span>
+                                    {image.metadata[0].quality_overall}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between">
+                                    <span>Face Size:</span>
+                                    <span className={`font-medium ${image.metadata[0].quality_face_size === 'High' ? 'text-green-600' : image.metadata[0].quality_face_size === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {image.metadata[0].quality_face_size} ({image.metadata[0].face_width}×{image.metadata[0].face_height}px)
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Sharpness:</span>
+                                    <span className={`font-medium ${image.metadata[0].quality_sharpness === 'High' ? 'text-green-600' : image.metadata[0].quality_sharpness === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {image.metadata[0].quality_sharpness} ({Math.round(image.metadata[0].sharpness_variance)})
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Lighting:</span>
+                                    <span className={`font-medium ${image.metadata[0].quality_lighting === 'High' ? 'text-green-600' : image.metadata[0].quality_lighting === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {image.metadata[0].quality_lighting} ({Math.round(image.metadata[0].brightness_value)})
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -617,43 +753,198 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
-            ) : (
-              // Show all sessions
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sessions.map((session) => (
-                  <div key={session.id} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-center mb-4">
-                      <div className="text-2xl mr-3">{getGenderIcon(session.user.gender)}</div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800">{session.user.name}</h3>
-                        <p className="text-sm text-gray-500">Age: {session.user.age} • {session.user.gender}</p>
-                        <p className="text-xs text-gray-400">{formatDate(session.started_at)}</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700">Status:</span>
-                        {getStatusBadge(session.status)}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-gray-700">Images:</span>
-                        <span className="text-sm text-gray-600">
-                          {session.successful_images}/{session.total_images}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <button
-                        onClick={() => loadSessionImages(session.id)}
-                        className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        View All Images
-                      </button>
+            ) : selectedUser ? (
+              // Show specific user images
+              <div className="space-y-6">
+                {/* User Info */}
+                <div className="bg-white rounded-lg shadow p-6">
+                  <div className="flex items-center mb-4">
+                    <div className="text-2xl mr-3">{getGenderIcon(selectedUser.gender)}</div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800">{selectedUser.name}</h3>
+                      <p className="text-sm text-gray-500">Age: {selectedUser.age} • {selectedUser.gender}</p>
+                      <p className="text-xs text-gray-400">{formatDate(selectedUser.created_at)}</p>
                     </div>
                   </div>
-                ))}
+
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Status:</span>
+                      {getStatusBadge(selectedUser.status)}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm font-medium text-gray-700">Images:</span>
+                      <span className="text-sm text-gray-600">
+                        {selectedUserImages.length} captured
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+
+                {/* Images Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {selectedUserImages.map((image, index) => (
+                    <div key={image.id} className="bg-white rounded-lg shadow overflow-hidden">
+                      <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
+                        <img
+                          src={image.image_data}
+                          alt={`${image.step} pose`}
+                          className="w-full h-full object-cover"
+                        />
+                        {image.metadata && Array.isArray(image.metadata) && image.metadata[0] && (
+                          <div className="absolute top-2 right-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getQualityColor(image.metadata[0].quality_overall)}`}>
+                              <span className="mr-1">{getQualityIcon(image.metadata[0].quality_overall)}</span>
+                              {image.metadata[0].quality_overall}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <h4 className="font-semibold text-gray-800 mb-2">
+                          {getStepIcon(image.step)} {image.step} Pose
+                        </h4>
+                        <div className="text-sm text-gray-600 space-y-2">
+                          <div className="flex justify-between">
+                            <span>Size:</span>
+                            <span className="font-medium">{image.width} × {image.height}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>File:</span>
+                            <span className="font-medium">{(image.file_size / 1024).toFixed(1)} KB</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Captured:</span>
+                            <span className="font-medium">{formatDate(image.created_at)}</span>
+                          </div>
+
+                          {image.metadata && Array.isArray(image.metadata) && image.metadata[0] && (
+                            <>
+                              <div className="pt-2 border-t border-gray-200">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="font-medium text-gray-700">Quality:</span>
+                                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getQualityColor(image.metadata[0].quality_overall)}`}>
+                                    <span className="mr-1">{getQualityIcon(image.metadata[0].quality_overall)}</span>
+                                    {image.metadata[0].quality_overall}
+                                  </span>
+                                </div>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between">
+                                    <span>Face Size:</span>
+                                    <span className={`font-medium ${image.metadata[0].quality_face_size === 'High' ? 'text-green-600' : image.metadata[0].quality_face_size === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {image.metadata[0].quality_face_size} ({image.metadata[0].face_width}×{image.metadata[0].face_height}px)
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Sharpness:</span>
+                                    <span className={`font-medium ${image.metadata[0].quality_sharpness === 'High' ? 'text-green-600' : image.metadata[0].quality_sharpness === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {image.metadata[0].quality_sharpness} ({Math.round(image.metadata[0].sharpness_variance)})
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Lighting:</span>
+                                    <span className={`font-medium ${image.metadata[0].quality_lighting === 'High' ? 'text-green-600' : image.metadata[0].quality_lighting === 'Medium' ? 'text-yellow-600' : 'text-red-600'}`}>
+                                      {image.metadata[0].quality_lighting} ({Math.round(image.metadata[0].brightness_value)})
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedUserImages.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">📷</div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">No Images Found</h3>
+                    <p className="text-gray-600">This user hasn't captured any images yet.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              // Show all images with quality information
+              <div className="space-y-6">
+                {/* Images Table */}
+                <div className="bg-white rounded-lg shadow overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Step</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quality</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {images.map((image) => (
+                          <tr key={image.id} className="hover:bg-gray-50">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <div className="text-2xl mr-3">{getGenderIcon(image.user.gender)}</div>
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{image.user.name}</div>
+                                  <div className="text-sm text-gray-500">Age: {image.user.age}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <span className="text-lg mr-2">{getStepIcon(image.step)}</span>
+                                <span className="text-sm font-medium text-gray-900">{image.step}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {image.metadata && Array.isArray(image.metadata) && image.metadata[0] ? (
+                                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getQualityColor(image.metadata[0].quality_overall)}`}>
+                                  <span className="mr-1">{getQualityIcon(image.metadata[0].quality_overall)}</span>
+                                  {image.metadata[0].quality_overall}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  <span className="mr-1">❓</span>
+                                  Unknown
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {image.metadata && Array.isArray(image.metadata) && image.metadata[0] ? (
+                                <div className="space-y-1">
+                                  <div>Size: {image.metadata[0].face_width}×{image.metadata[0].face_height}px</div>
+                                  <div>Sharpness: {Math.round(image.metadata[0].sharpness_variance)}</div>
+                                  <div>Brightness: {Math.round(image.metadata[0].brightness_value)}</div>
+                                </div>
+                              ) : (
+                                <div>No quality data</div>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {formatDate(image.created_at)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {images.length === 0 && (
+                  <div className="text-center py-12">
+                    <div className="text-6xl mb-4">📷</div>
+                    <h3 className="text-xl font-semibold text-gray-800 mb-2">No Images Found</h3>
+                    <p className="text-gray-600">
+                      {qualityFilter === 'All'
+                        ? "No images have been captured yet."
+                        : `No images found with ${qualityFilter.toLowerCase()} quality.`}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
