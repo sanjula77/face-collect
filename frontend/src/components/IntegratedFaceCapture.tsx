@@ -152,13 +152,36 @@ export default function IntegratedFaceCapture({
             img.onerror = reject;
           });
 
-          // Save image to database
+          let imageUrl = result.imageData; // Fallback to base64
+          let storagePath = '';
+          let fileSize = Math.round((result.imageData.length * 3) / 4);
+
+          // Try to upload to Supabase Storage
+          try {
+            const { uploadImageToStorage } = await import('../lib/storage');
+            const uploadResult = await uploadImageToStorage(
+              result.imageData,
+              userIdRef.current,
+              result.step,
+              result.timestamp
+            );
+            imageUrl = uploadResult.url;
+            storagePath = uploadResult.path;
+            fileSize = uploadResult.size;
+          } catch (storageError) {
+            console.warn(`Storage upload failed for ${result.step}, using base64 fallback:`, storageError);
+            // Continue with base64 fallback
+            storagePath = '';
+          }
+
+          // Save image metadata to database
           const savedImage = await saveFaceImage({
             userId: userIdRef.current,
             sessionId: sessionIdRef.current,
             step: result.step,
-            imageData: result.imageData,
-            imageUrl: result.imageData, // Using base64 as URL for now
+            imageUrl: imageUrl,
+            storagePath: storagePath,
+            fileSize: fileSize,
             width: img.width,
             height: img.height,
             metadata: {
@@ -192,6 +215,9 @@ export default function IntegratedFaceCapture({
         } catch (imageError) {
           console.error(`Error saving ${result.step} image:`, imageError);
           failedImages++;
+
+          // Show user-friendly error message
+          setError(`Failed to save ${result.step} image: ${imageError instanceof Error ? imageError.message : 'Unknown error'}`);
         }
       }
 

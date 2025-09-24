@@ -30,7 +30,8 @@ export interface MLTrainingData {
     images: Array<{
       image_id: string;
       step: string;
-      image_data: string; // Base64
+      image_url: string; // URL to image in Supabase Storage
+      storage_path: string; // Path in storage bucket
       width: number;
       height: number;
       quality_score: number;
@@ -113,7 +114,8 @@ export async function exportMLTrainingData(options: ExportOptions = {
         images: limitedImages.map(img => ({
           image_id: img.id,
           step: img.step,
-          image_data: options.include_images ? img.image_data : '',
+          image_url: img.image_url,
+          storage_path: img.storage_path,
           width: img.width,
           height: img.height,
           quality_score: img.metadata?.confidence_score || 0,
@@ -160,7 +162,7 @@ function exportToCSV(mlData: MLTrainingData): Blob {
   const csvRows: string[] = [];
   
   // Header
-  csvRows.push('user_id,name,age,gender,image_id,step,width,height,quality_score');
+  csvRows.push('user_id,name,age,gender,image_id,step,image_url,storage_path,width,height,quality_score');
   
   // Data rows
   mlData.users.forEach(user => {
@@ -172,6 +174,8 @@ function exportToCSV(mlData: MLTrainingData): Blob {
         user.gender,
         image.image_id,
         image.step,
+        image.image_url,
+        image.storage_path,
         image.width,
         image.height,
         image.quality_score

@@ -25,8 +25,8 @@ export interface FaceImageRecord {
   id: string;
   user_id: string;
   step: 'Center' | 'Left' | 'Right' | 'Up' | 'Down';
-  image_url: string;
-  image_data: string; // Base64 encoded image
+  image_url: string; // URL to image in Supabase Storage
+  storage_path: string; // Path in storage bucket
   file_size: number;
   width: number;
   height: number;
@@ -90,8 +90,8 @@ CREATE TABLE face_images (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   step VARCHAR(10) NOT NULL CHECK (step IN ('Center', 'Left', 'Right', 'Up', 'Down')),
-  image_url TEXT NOT NULL,
-  image_data TEXT NOT NULL, -- Base64 encoded
+  image_url TEXT NOT NULL, -- URL to image in Supabase Storage
+  storage_path TEXT NOT NULL, -- Path in storage bucket
   file_size INTEGER NOT NULL,
   width INTEGER NOT NULL,
   height INTEGER NOT NULL,
@@ -275,38 +275,79 @@ export async function updateCaptureSession(
 }
 
 /**
- * Save face image to database
+ * Save face image to database (with storage URL)
  */
 export async function saveFaceImage(imageData: {
   userId: string;
   sessionId: string;
   step: 'Center' | 'Left' | 'Right' | 'Up' | 'Down';
-  imageData: string; // Base64
-  imageUrl: string;
+  imageUrl: string; // URL to image in Supabase Storage
+  storagePath?: string; // Path in storage bucket (optional for backward compatibility)
+  fileSize: number;
   width: number;
   height: number;
   metadata?: any;
 }): Promise<FaceImageRecord> {
   try {
-    // Calculate file size (approximate)
-    const fileSize = Math.round((imageData.imageData.length * 3) / 4);
+    // Try to insert with storage_path first (new schema)
+    const insertData: any = {
+      user_id: imageData.userId,
+      step: imageData.step,
+      image_url: imageData.imageUrl,
+      image_data: imageData.imageUrl, // Required field - use URL as fallback
+      file_size: imageData.fileSize,
+      width: imageData.width,
+      height: imageData.height,
+      metadata: imageData.metadata
+    };
 
-    const { data, error } = await supabase
-      .from('face_images')
-      .insert([{
-        user_id: imageData.userId,
-        step: imageData.step,
-        image_url: imageData.imageUrl,
-        image_data: imageData.imageData,
-        file_size: fileSize,
-        width: imageData.width,
-        height: imageData.height,
-        metadata: imageData.metadata
-      }])
-      .select()
-      .single();
+    // Add storage_path if provided and not empty
+    if (imageData.storagePath && imageData.storagePath.trim() !== '') {
+      insertData.storage_path = imageData.storagePath;
+    }
+
+    let data, error;
+    try {
+      const result = await supabase
+        .from('face_images')
+        .insert([insertData])
+        .select()
+        .single();
+      
+      data = result.data;
+      error = result.error;
+    } catch (insertError) {
+      console.error('Exception during database insert:', insertError);
+      throw new Error(`Database insert exception: ${insertError instanceof Error ? insertError.message : 'Unknown error'}`);
+    }
 
     if (error) {
+      // If storage_path column doesn't exist, try without it
+      if (error.message && (error.message.includes('storage_path') || error.message.includes('column'))) {
+        const fallbackData = {
+          user_id: imageData.userId,
+          step: imageData.step,
+          image_url: imageData.imageUrl,
+          image_data: imageData.imageUrl, // Use URL as fallback for image_data
+          file_size: imageData.fileSize,
+          width: imageData.width,
+          height: imageData.height,
+          metadata: imageData.metadata
+        };
+
+        const { data: fallbackResult, error: fallbackError } = await supabase
+          .from('face_images')
+          .insert([fallbackData])
+          .select()
+          .single();
+
+        if (fallbackError) {
+          throw new Error(`Failed to save face image (fallback): ${fallbackError.message}`);
+        }
+
+        return fallbackResult;
+      }
+      
       throw new Error(`Failed to save face image: ${error.message}`);
     }
 
@@ -533,6 +574,44 @@ export async function getCaptureSessions(page: number = 1, limit: number = 20): 
  */
 export async function deleteUser(userId: string): Promise<void> {
   try {
+    // First, get all face images for this user to delete from storage
+    const { data: faceImages, error: imagesError } = await supabase
+      .from('face_images')
+      .select('storage_path, image_url')
+      .eq('user_id', userId);
+
+    if (imagesError) {
+      throw new Error(`Failed to get face images: ${imagesError.message}`);
+    }
+
+    // Delete images from storage
+    const { deleteAllUserImages } = await import('./storage');
+    
+    try {
+      await deleteAllUserImages(userId);
+    } catch (storageError) {
+      console.error('Storage deletion failed:', storageError);
+      
+      // Fallback: try individual image deletion if we have storage paths
+      if (faceImages && faceImages.length > 0) {
+        const { deleteImageFromStorage } = await import('./storage');
+        
+        const validStoragePaths = faceImages
+          .map(img => img.storage_path)
+          .filter(path => path && path.trim() !== '');
+        
+        if (validStoragePaths.length > 0) {
+          await Promise.all(
+            validStoragePaths.map(path => 
+              deleteImageFromStorage(path).catch(err => 
+                console.warn(`Failed to delete individual image: ${path}`, err)
+              )
+            )
+          );
+        }
+      }
+    }
+
     // Delete user record - this will cascade delete all related records due to foreign key constraints
     const { error } = await supabase
       .from('users')

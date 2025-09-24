@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { getUsers, getCaptureSessions, getDatabaseStats, deleteUser, getCaptureSessionWithImages, getAllFaceImagesWithMetadata, getUserFaceImagesWithMetadata } from "@/lib/database";
+import { cleanupOrphanedImages } from "@/lib/storage";
 import type { UserRecord, CaptureSessionRecord, FaceImageRecord, FaceMetadataRecord } from "@/lib/database";
 import AdminLogin from "@/components/AdminLogin";
 
@@ -52,6 +53,7 @@ export default function AdminPage() {
   const [qualityFilter, setQualityFilter] = useState<'High' | 'Medium' | 'Low' | 'All'>('All');
   const [selectedUserImages, setSelectedUserImages] = useState<any[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
 
   // ============================================================================
   // DATA FETCHING
@@ -185,6 +187,24 @@ export default function AdminPage() {
     } catch (error) {
       console.error('Error loading user images:', error);
       setError('Failed to load user images');
+    }
+  };
+
+  const handleCleanupOrphanedImages = async () => {
+    if (!confirm('This will delete all images in storage that don\'t have corresponding database records. Continue?')) {
+      return;
+    }
+
+    setIsCleaningUp(true);
+    try {
+      const result = await cleanupOrphanedImages();
+      alert(`Cleanup completed! Deleted ${result.deleted} orphaned folders. ${result.errors.length > 0 ? `Errors: ${result.errors.length}` : 'No errors.'}`);
+      await loadData(); // Reload data
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      alert('Failed to cleanup orphaned images');
+    } finally {
+      setIsCleaningUp(false);
     }
   };
 
@@ -455,8 +475,16 @@ export default function AdminPage() {
                 >
                   View All Sessions
                 </button>
+                <button
+                  onClick={handleCleanupOrphanedImages}
+                  disabled={isCleaningUp}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCleaningUp ? 'Cleaning...' : 'Cleanup Orphaned Images'}
+                </button>
               </div>
             </div>
+
           </div>
         )}
 
@@ -674,7 +702,7 @@ export default function AdminPage() {
                     <div key={image.id} className="bg-white rounded-lg shadow overflow-hidden">
                       <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                         <img
-                          src={image.image_data}
+                          src={image.image_url}
                           alt={`${image.step} pose`}
                           className="w-full h-full object-cover"
                         />
@@ -787,7 +815,7 @@ export default function AdminPage() {
                     <div key={image.id} className="bg-white rounded-lg shadow overflow-hidden">
                       <div className="aspect-square bg-gray-100 flex items-center justify-center relative">
                         <img
-                          src={image.image_data}
+                          src={image.image_url}
                           alt={`${image.step} pose`}
                           className="w-full h-full object-cover"
                         />
